@@ -1,29 +1,23 @@
-/**
- * EVM From Scratch
- * Rust template
- *
- * To work on EVM From Scratch in Rust:
- *
- * - Install Rust: https://www.rust-lang.org/tools/install
- * - Edit `rust/lib.rs`
- * - Run `cd rust && cargo run` to run the tests
- *
- * Hint: most people who were trying to learn Rust and EVM at the same
- * gave up and switched to JavaScript, Python, or Go. If you are new
- * to Rust, implement EVM in another programming language first.
- */
+use std::option;
 
-use evm::evm;
-use primitive_types::U256;
+use evm::evm;//crate used to provide evm implementation
+use primitive_types::U256;//allows to use U256 type
 use serde::Deserialize;
 
+//The Debug trait is used to format a value using the {:?} formatter.
+//The Deserialize trait is used to deserialize a data structure from a format like JSON, TOML, YAML, etc.
 #[derive(Debug, Deserialize)]
+
+//Seeing the format of the JSON file, we can see that it has a name, hint, code, and expect fields.
+
 struct Evmtest {
     name: String,
     hint: String,
     code: Code,
     expect: Expect,
 }
+
+//The Code struct has two fields, asm and bin, which are strings.
 
 #[derive(Debug, Deserialize)]
 struct Code {
@@ -32,6 +26,14 @@ struct Code {
 }
 
 #[derive(Debug, Deserialize)]
+//The Expect struct has two fields: stack, success.
+//The stack field is an optional vector of strings, and the success field is a boolean.
+//Option : implies that the value is optional and can be None.
+//enum Option<T> {
+//    None,
+//    Some(T),
+//}
+
 struct Expect {
     stack: Option<Vec<String>>,
     success: bool,
@@ -39,27 +41,55 @@ struct Expect {
     // ret: Option<String>,
 }
 
-
 fn main() {
     let text = std::fs::read_to_string("../evm.json").unwrap();
+    //The read_to_string function reads the contents of the file and returns a Result<String>.
+    //The unwrap function is used to extract the value from the Result  or panic if it is an error.
+
     let data: Vec<Evmtest> = serde_json::from_str(&text).unwrap();
+    //serde_json deserealizes json string to text variable and then stored into vector where each element is of type struct Evmtest
 
     let total = data.len();
+    //total should be equal to total  tests 
+    //each test is a single element stored in vector as a struct 
 
+        //data.iter() allows iterating over the vector data
+        //enumerate adds index to each element
+        //so tuple (index, test) is created for each element in vector data 
+        //test is of type struct Evmtest
     for (index, test) in data.iter().enumerate() {
+
         println!("Test {} of {}: {}", index + 1, total, test.name);
 
         let code: Vec<u8> = hex::decode(&test.code.bin).unwrap();
+        //decodes the hex string (&str) into bytes and stores in code variable
+        //code is a vector of u8
 
-        let result = evm(&code);
+        let result = evm(&code);//defined in lib.rs
+        //&code is the bytecode
+        //evm function executes the bytecode
 
         let mut expected_stack: Vec<U256> = Vec::new();
+       //stack holds U256 values
+    
+
+        //the below line checks if test.expect.stack holds a value or not
+
+        //if it does it is assigned to staacks then it pushes the value into expected_stack
+        // If test.expect.stack is None, the code inside the block will be skipped.
+          
         if let Some(ref stacks) = test.expect.stack {
             for value in stacks {
                 expected_stack.push(U256::from_str_radix(value, 16).unwrap());
             }
-        }
+            //str is converted to u256 and pushed into expected_stack
+                //base 16 converted to u256
 
+                //eg if test.expect.stack = ["0x01", "0x02", "0x03"]
+                //then expected_stack = [1, 2, 3]
+        }
+        //The below code checks if the result of the test matches the expected result.
+        //If it does not match, the test fails and the program panics.
         let mut matching = result.stack.len() == expected_stack.len();
         if matching {
             for i in 0..result.stack.len() {
@@ -80,7 +110,8 @@ fn main() {
             for v in expected_stack {
                 println!("  {:#X},", v);
             }
-            println!("]\n");
+            
+            println!("\n");
             
             println!("Actual success: {:?}", result.success);
             println!("Actual stack: [");
