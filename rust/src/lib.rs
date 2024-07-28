@@ -401,6 +401,8 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
                     }
                 }
             }
+            println!("{}",v0);
+            println!("{}",v1);
             
         }
         else if opcode==0x13{
@@ -431,10 +433,10 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             if v0_is_negative==v1_is_negative{
                 if v0_is_negative==true{
                     if !gt{
-                        stack.insert(0, U256::from(0));
+                        stack.insert(0, U256::from(1));
                     }
                     else{
-                        stack.insert(0, U256::from(1));
+                        stack.insert(0, U256::from(0));
                     }
 
                 }
@@ -447,9 +449,137 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
                     }
                 }
             }
+            println!("{}",v0);
+            println!("{}",v1);
             
         }
-       
+        else if opcode==0x14{
+            let (mut v0,mut v1)=remove_two(&mut stack);
+            let eq=equalto(v0, v1);
+            if eq{
+                stack.insert(0,U256::from(1));
+            }
+            else{
+                stack.insert(0,U256::from(0));
+            }
+
+        }
+        else if opcode==0x15{
+            let mut v0=remove_one(&mut stack);
+            if v0==U256::from(0){
+                stack.insert(0,U256::from(1));
+            }
+            else{
+                stack.insert(0,U256::from(0));
+            }}
+
+        else if opcode==0x19{
+            let mut v0=remove_one(&mut stack);
+            stack.insert(0, !v0);
+            println!("{}",v0);
+            println!("{}",!v0);
+        }
+        else if opcode==0x16{
+            let (mut v0,mut v1)=remove_two(&mut stack);
+            stack.insert(0,v0&v1);
+        }
+        else if opcode==0x17{
+            let (mut v0,mut v1)=remove_two(&mut stack);
+            stack.insert(0,v0|v1);
+        }
+        else if opcode ==0x18{
+            let (mut v0,mut v1)=remove_two(&mut stack);
+            stack.insert(0,v0^v1);
+        }
+        else if opcode ==0x1b{
+            let (mut shift, mut num) = remove_two(&mut stack);
+
+        // Convert shift to a usize
+            let shift_amount: usize = shift.low_u64() as usize;
+        
+        // Perform the left shift
+            num = num << shift_amount;
+        
+        // Push the result back onto the stack
+            push(&mut stack, num);
+            }
+
+        else if opcode==0x1c{
+            let (mut shift, mut num) = remove_two(&mut stack);
+            num=shr(&mut stack,shift,num);
+            push(&mut stack, num);
+        }
+        else if opcode==0x1d{
+            if stack.len() < 2 {
+                panic!("Stack does not have enough elements for SAR operation.");
+            }
+        
+            // Pop the top two elements from the stack
+            let shift_amount = stack.remove(0).low_u64() as usize; // Taking the lower 64 bits as the shift amount
+            let mut value = stack.remove(0);
+        
+            // Check if the value is negative (MSB is 1)
+            let is_negative = (value >> 255).low_u32() != 0;
+        
+            // Perform arithmetic right shift
+            if shift_amount >= 256 {
+                // If shift amount is too large
+                value = if is_negative { U256::MAX } else { U256::zero() };
+            } else {
+                value = value >> shift_amount;
+                if is_negative {
+                    // Fill the leftmost bits with 1s
+                    let fill_mask = U256::MAX << (256 - shift_amount);
+                    value= value | fill_mask;
+                }
+            }
+        
+            // Push the result back onto the stack
+            stack.insert(0, value);
+
+        }
+        else if opcode==0x1a{
+            if stack.len() < 2 {
+                panic!("Stack does not have enough elements for BYTE operation.");
+            }
+        
+            // Remove the top two elements from the stack
+            let byte_num = stack.remove(0);
+            let value = stack.remove(0);
+        
+            // Convert byte_num to usize
+            let byte_pos = byte_num.low_u32() as usize;
+            
+            // Convert value to a 32-byte array
+            let mut value_bytes = [0u8; 32];
+            value.to_big_endian(&mut value_bytes);
+        
+            // Debugging output
+            println!("Value as bytes: {:?}", value_bytes);
+            println!("Byte position: {}", byte_pos);
+        
+            // Extract the byte at the specified position
+            let result = if byte_pos < 32 {
+                U256::from(value_bytes[byte_pos])
+            } else {
+                U256::zero()
+            };
+        
+            // Push the result back onto the stack
+            stack.insert(0, result);
+            /* 
+            
+            let  (mut byte_num , mut value )=remove_two(&mut stack);
+
+            let byte_pos = byte_num.low_u32() as usize;
+            let mut value_bytes = [0u8; 32];
+            value.to_big_endian(&mut value_bytes);//value converted to array of bytes
+            let byte = value_bytes[byte_pos];
+            stack.insert(0, U256::from(byte));*/
+            
+        }
+    
+
 
        
             
@@ -466,7 +596,26 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         success: true,
     };
 }
+fn shr(stack: &mut Vec<U256>, mut shift: U256, mut num: U256) -> U256 {
 
+    let shift_amount: usize = shift.low_u64() as usize;
+    num = num >> shift_amount;
+    num
+
+
+}
+fn remove_one(stack: &mut Vec<U256>) -> U256 {
+    stack.remove(0)
+}
+fn remove_two(stack: &mut Vec<U256>) -> (U256, U256) {
+    let a = stack.remove(0);
+
+    let b = stack.remove(0);
+    (a, b)
+}
+fn equalto(x: U256, y: U256) -> bool {
+    x == y
+}
 fn greater_than(x: U256, y: U256) -> bool {
     x > y
 }
@@ -558,4 +707,5 @@ fn divide (a:U256,b:U256)->U256{
 fn push(stack: &mut Vec<U256>, value: U256) {
     stack.insert(0, value);
 }
+
 

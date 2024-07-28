@@ -760,11 +760,11 @@
     "hint": "Bitwise NOT operation, flips every bit 1->0, 0->1",
     "code": {
       "asm": "PUSH1 0x0f\nNOT",
-      "bin": "600f19"
+      "bin": "600e19"
     },
     "expect": {
       "stack": [
-        "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0"
+        "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1"
       ],
       "success": true
     }
@@ -790,7 +790,7 @@
       "asm": "PUSH1 0xe\nPUSH1 0x3\nOR",
       "bin": "600e600317"
     },
-    "expect": {
+    "expect": { 
       "stack": [
         "0xf"
       ],
@@ -909,6 +909,7 @@
       "success": true
     }
   },
+  
   {
     "name": "SAR (fills 1s)",
     "hint": "Note that unlike SHR, it fills the empty space with 1s",
