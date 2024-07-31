@@ -1,3 +1,5 @@
+use std::{cmp::max, i8};
+mod helpers;
 use primitive_types::U256;
 use serde::de::value;
 pub struct EvmResult {
@@ -7,28 +9,30 @@ pub struct EvmResult {
 
 //function can accept any type that can be converted to a byte slice
 
+const PUSH_OPCODES: [u8; 16] = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f];
 
 pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
     let mut stack: Vec<U256> = Vec::new();
     let mut pc: usize = 0;
-
     let code = _code.as_ref();
     
-
     while pc < code.len() {
         let opcode = code[pc];
         pc += 1;
+
+        //STOP 
 
         if opcode == 0x00 {
             //println!("{} pc: ",pc);
             break;
         }
+        //PUSH0
         else if opcode ==0x5f {
             let zero_u256: U256 = U256::from(0);
             stack.push(zero_u256);
             //println!("{} pc: ",pc);
             //println!(" stack: {}",stack[0]);
-        }
+        }/* 
         else if opcode == 0x60 {
             let value = U256::from(code[pc]);
             stack.insert(0,value);//inserts value at the beginning of the stack
@@ -44,7 +48,12 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             //<<8 shifts the bits of the first byte to the left by 8 bits
             //initial 8 bits stored as 16 bits and shifted to left
             stack.insert(0,U256::from(value));
-            pc += 2;
+            pc += 2;    
+        }
+        else if opcode==0x62{
+            let value = (code[pc] as u32) << 16 | (code[pc + 1] as u32) << 8 | code[pc + 2] as u32;
+            stack.insert(0,U256::from(value));
+            pc += 3;
         }
         else if opcode==0x63{
             let value = (code[pc] as u32) << 24 | (code[pc + 1] as u32) << 16 | (code[pc + 2] as u32) << 8 | code[pc + 3] as u32;
@@ -58,7 +67,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
                 //value is shifted to left by 8 bits and then the next byte is added
                 //then again the entire 16 bits is treated as value and then shifted to left by 8 bits
                 //done 6 times
-                value= value << 8 | code[pc + i] as u64; 
+                value= value << 8 | code[pc + i] as usize; 
             }
             stack.push(U256::from(value));
             pc+=6;
@@ -81,7 +90,20 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             }
             stack.push(U256::from(value));
             pc+=size;
+        }*/
+        
+        //PUSH N
+        else if (0x60..=0x7e).contains(&opcode) {
+
+            let size = (opcode - 0x60 + 1) as usize;
+            let mut value = 0;
+            for i in 0..size {
+                value = value << 8 | code[pc + i] as u128;
+            }
+            pc+=size;
+            stack.insert(0,U256::from(value));
         }
+        //PUSH32
         else if opcode==0x7f{
             let size=32;
             let mut bytes: [u8; 32] = [0; 32];//bytes is a fixed-size array of 32 bytes, initialized with zeros.
@@ -92,10 +114,12 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             stack.insert(0,value);
             pc+=size;
         }
+        //POP
         else if opcode==0x50{
             stack.remove(0);
         }
         /*else if opcode==0x01{
+
             let mut v0=stack[0];
             let mut v1=stack[1];
             //TO prevent overflow
@@ -118,53 +142,43 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             }
 
         }*/
+        
+        //ARITHMETIC OPERATIONS 
+
         else if opcode==0x01{
-            let mut v0=stack[0];
-            let mut v1=stack[1];
-            stack.remove(0);
-            stack.remove(0);
-            stack.insert(0,add(v0,v1));
+            let (v0,v1)=helpers::remove_two(&mut stack);
+            helpers::push(&mut stack, helpers::add(v0,v1));
         }
         else if opcode==0x02{
-            let mut v0=U256::from(stack[0]) ;
-            let mut v1=U256::from(stack[1]);
-            stack.remove(0);
-            stack.remove(0);
-            
-            stack.insert(0,v0.overflowing_mul(v1).0   );
+            let (v0,v1)=helpers::remove_two(&mut stack);
+            helpers::push(&mut stack, helpers::multiply(v0,v1));
+            //stack.insert(0,v0.overflowing_mul(v1).0   );
             //we can use overflowing_add in previous test suite
-
         }
       
         else if opcode==0x03{
-            let mut v0=U256::from(stack[0]) ;
-            let mut v1=U256::from(stack[1]);
-            stack.remove(0);
-            stack.remove(0);
+            let (v0,v1)=helpers::remove_two(&mut stack);
+
            /*  if v0>=v1{
                 stack.insert(0,v0-v1);
             }
             else{
                 stack.insert(0,U256::max_value()-v1+v0+1);
             }*/
-            stack.insert(0,subtract(v0,v1));
+            helpers::push(&mut stack, helpers::subtract(v0,v1));
 
             //OR 
             //stack.insert(0,v0.overflowing_sub(v1).0   );
         }
         else if opcode ==0x04{
-            let mut v0=U256::from(stack[0]) ;
-            let mut v1=U256::from(stack[1]);
-            stack.remove(0);
-            stack.remove(0);
-            stack.insert(0,divide(v0, v1));
+            let (v0,v1)=helpers::remove_two(&mut stack);
+
+            helpers::push(&mut stack, helpers::divide(v0,v1));
         }
+
         else if opcode == 0x06{
-            let mut v0=U256::from(stack[0]) ;
-            let mut v1=U256::from(stack[1]);
-            stack.remove(0);
-            stack.remove(0);
-            stack.insert(0,modulus(v0,v1));
+            let (v0,v1)=helpers::remove_two(&mut stack);
+            helpers::push(&mut stack, helpers::modulus(v0,v1));
             /* 
             if v1==U256::from(0){
                 stack.insert(0,U256::from(0));
@@ -173,10 +187,11 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
                 stack.insert(0, v0%v1)
             }*/
         } 
+
+        //ADDMOD
+        
         else if opcode==0x08{
-            let mut v0=stack[0];
-            let mut v1=stack[1];
-            let mut v2=stack[2];
+            let (mut v0,mut v1,mut v2)=helpers::remove_three(&mut stack);
             /* 
             //TO prevent overflow
             if v0>U256::max_value()/2{
@@ -199,23 +214,15 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             }
             stack.remove(0);
             stack.insert(0, vadd%v2) */
-            stack.remove(0);
-            stack.remove(0);
 
-            stack.remove(0);
 
-            let vadd=add(v0,v1);
-            push(&mut stack, modulus(vadd, v2));
+            let vadd=helpers::add(v0,v1);
+            helpers::push(&mut stack, helpers::modulus(vadd, v2));
 
         }
-        else if opcode == 0x09 {
-            let mut v0=stack[0];
-            let mut v1=stack[1];
-            let mut v2=stack[2];
 
-            stack.remove(0);
-            stack.remove(0);
-            stack.remove(0);
+        else if opcode == 0x09 {
+            let (mut v0,mut v1,mut v2)=helpers::remove_three(&mut stack);
 
             v0=match v0.checked_rem(v2){
                 Some(y)=>y,
@@ -303,7 +310,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             if is_negative(v1){
                 v1=convert_twos_compliment(v1);
             }
-            let mut div=divide(v0,v1);
+            let mut div=helpers::divide(v0,v1);
             if v0_is_negative!=v1_is_negative{
                 div=convert_twos_compliment(div);
             }
@@ -327,7 +334,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             if is_negative(v1){
                 v1=convert_twos_compliment(v1);
             }
-            let mut modul=modulus(v0,v1);
+            let mut modul=helpers::modulus(v0,v1);
             if v0_is_negative && v1_is_negative{
                 modul=convert_twos_compliment(modul);
             }
@@ -454,7 +461,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             
         }
         else if opcode==0x14{
-            let (mut v0,mut v1)=remove_two(&mut stack);
+            let (mut v0,mut v1)=helpers::remove_two(&mut stack);
             let eq=equalto(v0, v1);
             if eq{
                 stack.insert(0,U256::from(1));
@@ -480,19 +487,19 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             println!("{}",!v0);
         }
         else if opcode==0x16{
-            let (mut v0,mut v1)=remove_two(&mut stack);
+            let (mut v0,mut v1)=helpers::remove_two(&mut stack);
             stack.insert(0,v0&v1);
         }
         else if opcode==0x17{
-            let (mut v0,mut v1)=remove_two(&mut stack);
+            let (mut v0,mut v1)=helpers::remove_two(&mut stack);
             stack.insert(0,v0|v1);
         }
         else if opcode ==0x18{
-            let (mut v0,mut v1)=remove_two(&mut stack);
+            let (mut v0,mut v1)=helpers::remove_two(&mut stack);
             stack.insert(0,v0^v1);
         }
         else if opcode ==0x1b{
-            let (mut shift, mut num) = remove_two(&mut stack);
+            let (mut shift, mut num) =helpers::remove_two(&mut stack);
 
         // Convert shift to a usize
             let shift_amount: usize = shift.low_u64() as usize;
@@ -501,13 +508,13 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             num = num << shift_amount;
         
         // Push the result back onto the stack
-            push(&mut stack, num);
+            helpers::push(&mut stack, num);
             }
 
         else if opcode==0x1c{
-            let (mut shift, mut num) = remove_two(&mut stack);
-            num=shr(&mut stack,shift,num);
-            push(&mut stack, num);
+            let (mut shift, mut num) =helpers::remove_two(&mut stack);
+            num=shr(shift,num);
+            helpers::push(&mut stack, num);
         }
         else if opcode==0x1d{
             if stack.len() < 2 {
@@ -567,9 +574,10 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         
             // Push the result back onto the stack
             stack.insert(0, result);
+            println!("{}",result);
             /* 
             
-            let  (mut byte_num , mut value )=remove_two(&mut stack);
+            let  (mut byte_num , mut value )=helpers::remove_two(&mut stack);
 
             let byte_pos = byte_num.low_u32() as usize;
             let mut value_bytes = [0u8; 32];
@@ -578,6 +586,92 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             stack.insert(0, U256::from(byte));*/
             
         }
+        else if (0x80..=0x87).contains(&opcode){
+            let size: u8=opcode-0x80+1;
+            let sizen=size as usize;
+            let val=helpers::dup_n(&mut stack, sizen);
+            helpers::push(&mut stack,val);
+
+        }
+        else if (0x90..=0x96).contains(&opcode){
+            let size: u8=opcode-0x90+1;
+            let sizen: usize=size as usize;
+            helpers::swap(&mut stack,sizen);
+
+        }
+        else if opcode==0xfe{
+            return EvmResult {
+                stack: stack,
+                success: false,
+            };
+        }
+        else if opcode==0x58{
+            helpers::push(&mut stack, U256::from(pc-1));
+        }
+        else if opcode==0x5a{
+            helpers::push(&mut stack, U256::max_value());
+
+        }
+        //JUMP ""
+        else if opcode==0x56{
+
+            pc=stack.remove(0).low_u64() as usize;
+            println!("{}",code[pc]);
+            //bad instruction boundry:
+            //jump destination is not opcode 
+            //it has same hex code as the op code but actually it
+    
+            if code[pc]!=0x5b{
+                return EvmResult {
+                    stack: stack,
+                    success: false,
+                };
+            }
+            if code[pc]==0x5b && PUSH_OPCODES.contains(&code[pc-1]){
+                return EvmResult {
+                    stack: stack,
+                    success: false,
+                };
+            }
+
+        }
+        else if opcode ==0x57{
+       
+            let (mut v0,mut v1)= helpers::remove_two(&mut stack);
+            println!("{}",v0);
+            println!("{}",v1);
+            helpers::push(&mut stack, v1);
+            let lll=stack.remove(0);
+
+
+            if lll==U256::from(0){
+            }
+            else if v1!=U256::from(0){
+                //WE CHECKED IF V1 IS NOT ZERO
+                //AND IF V1 IS NOT ZERO THEN WE ASSIGN PC TO V0
+                //DOUBT 
+
+                pc=v0.low_u64() as usize;  
+                if code[pc]!=0x5b{
+                return EvmResult {
+                    stack: stack,
+                    success: false,
+                };
+            }
+            if code[pc]==0x5b && PUSH_OPCODES.contains(&code[pc-1]){
+                return EvmResult {
+                    stack: stack,
+                    success: false,
+                };
+            }
+              
+            }
+            
+        }
+        
+
+       
+
     
 
 
@@ -596,7 +690,8 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         success: true,
     };
 }
-fn shr(stack: &mut Vec<U256>, mut shift: U256, mut num: U256) -> U256 {
+
+fn shr(mut shift: U256, mut num: U256) -> U256 {
 
     let shift_amount: usize = shift.low_u64() as usize;
     num = num >> shift_amount;
@@ -607,12 +702,7 @@ fn shr(stack: &mut Vec<U256>, mut shift: U256, mut num: U256) -> U256 {
 fn remove_one(stack: &mut Vec<U256>) -> U256 {
     stack.remove(0)
 }
-fn remove_two(stack: &mut Vec<U256>) -> (U256, U256) {
-    let a = stack.remove(0);
 
-    let b = stack.remove(0);
-    (a, b)
-}
 fn equalto(x: U256, y: U256) -> bool {
     x == y
 }
@@ -656,56 +746,8 @@ fn extend(x:U256,bytes_pos:usize)->U256{
     let mask = U256::MAX << bits_to_extend;
     x | mask
 }
-fn add (a:U256,b:U256)->U256{
-    let mut v0=a;
-    let mut v1=b;
-    if v0>U256::max_value()/2{
-        v0=U256::max_value()-v0;
-    }
-    if v1>U256::max_value()/2{
-        v1=U256::max_value()-v1;
-    }
 
-    if v0!=a || v1!=b{
-        return v0+v1-1;
-   
-        
-    }
-    else {
-       
-        return v0+v1;
-    }
-}
-fn modulus (c:U256,m:U256)->U256{
-    if m==U256::from(0){
-        return U256::from(0);
-    }
-    else{
-        return c%m;
-    }
-}
-fn multiply (a:U256,b:U256)->U256{
-    return a.overflowing_mul(b).0;
-}
-fn subtract(a:U256,b:U256)->U256{
-    if a>=b{
-        return a-b;
-    }
-    else{
-        return U256::max_value()-b+a+1;
-    }
-}
-fn divide (a:U256,b:U256)->U256{
-    if b==U256::from(0){
-        return U256::from(0);
-    }
 
-    else{
-        return a/b;
-    }
-}
-fn push(stack: &mut Vec<U256>, value: U256) {
-    stack.insert(0, value);
-}
+
 
 
