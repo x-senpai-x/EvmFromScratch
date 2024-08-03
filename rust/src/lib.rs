@@ -1,21 +1,35 @@
-use std::{cmp::max, i8};
+use core::hash;
+use std::{cmp::max, i8, mem};
 mod helpers;
 use primitive_types::U256;
 use serde::de::value;
+use sha3::{Digest, Keccak256};
+
 pub struct EvmResult {
     pub stack: Vec<U256>,
     pub success: bool,
 }
 
+struct Tx{
+    value : Option<String>,
+    data: Option<String>,
+    from : Option<String>,
+    to : Option<String>,
+    gas: Option<String>,
+    origin: Option<String>,
+    gasprice: Option<String>,
+}
 //function can accept any type that can be converted to a byte slice
 
 const PUSH_OPCODES: [u8; 16] = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f];
 
-pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
+pub fn evm(_code: impl AsRef<[u8]>,_tx: Option<&Tx>) -> EvmResult {
     let mut stack: Vec<U256> = Vec::new();
     let mut pc: usize = 0;
     let code = _code.as_ref();
-    
+    let mut memory: Vec<u8> = Vec::new();
+    let to=&_tx.unwrap().to;
+
     while pc < code.len() {
         let opcode = code[pc];
         pc += 1;
@@ -281,7 +295,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             //Applying & 0x80 to sign_byte isolates the MSB of sign_byte.
             //Returns 0 if MSB is 0
             //U256 stores the most significant byte at the start (big-endian format).*/
-            let extended_value = if sign(x,k) {
+            let extended_value = if helpers::sign(x,k) {
                 // Extend sign bit for negative numbers
                 /* 
                 let bits_to_extend: usize = (byte_pos + 1) * 8;
@@ -289,7 +303,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
                 //This covers all bits above the byte position with 1s.
                 let mask = U256::MAX << bits_to_extend;
                 x | mask*/
-                extend(x,byte_pos)
+                helpers::extend(x,byte_pos)
             } else {
                 // Positive numbers remain the same
                 x
@@ -302,17 +316,17 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         else if opcode ==0x05{
             let mut v0=stack.remove(0);
             let mut v1=stack.remove(0);
-            let v0_is_negative=is_negative(v0);
-            let v1_is_negative=is_negative(v1);
-            if is_negative(v0){
-                v0=convert_twos_compliment(v0);
+            let v0_is_negative=helpers::is_negative(v0);
+            let v1_is_negative=helpers::is_negative(v1);
+            if helpers::is_negative(v0){
+                v0=helpers::convert_twos_compliment(v0);
             }
-            if is_negative(v1){
-                v1=convert_twos_compliment(v1);
+            if helpers::is_negative(v1){
+                v1=helpers::convert_twos_compliment(v1);
             }
             let mut div=helpers::divide(v0,v1);
             if v0_is_negative!=v1_is_negative{
-                div=convert_twos_compliment(div);
+                div=helpers::convert_twos_compliment(div);
             }
             //why is this required ???
             if v0==U256::from(0) || v1==U256::from(0){
@@ -326,17 +340,17 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         else if opcode==0x07{
             let mut v0=stack.remove(0);
             let mut v1=stack.remove(0);
-            let v0_is_negative=is_negative(v0);
-            let v1_is_negative=is_negative(v1);
-            if is_negative(v0){
-                v0=convert_twos_compliment(v0);
+            let v0_is_negative=helpers::is_negative(v0);
+            let v1_is_negative=helpers::is_negative(v1);
+            if helpers::is_negative(v0){
+                v0=helpers::convert_twos_compliment(v0);
             }
-            if is_negative(v1){
-                v1=convert_twos_compliment(v1);
+            if helpers::is_negative(v1){
+                v1=helpers::convert_twos_compliment(v1);
             }
             let mut modul=helpers::modulus(v0,v1);
             if v0_is_negative && v1_is_negative{
-                modul=convert_twos_compliment(modul);
+                modul=helpers::convert_twos_compliment(modul);
             }
 
             stack.insert(0, modul);
@@ -345,7 +359,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         else if opcode==0x10{
             let mut v0=stack.remove(0);
             let mut v1=stack.remove(0);
-            let lt=less_than(v0,v1);
+            let lt=helpers::less_than(v0,v1);
             if lt{
                 stack.insert(0,U256::from(1));
             }
@@ -356,7 +370,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         else if opcode==0x11{
             let mut v0=stack.remove(0);
             let mut v1=stack.remove(0);
-            let lt=greater_than(v0,v1);
+            let lt=helpers::greater_than(v0,v1);
             if lt{
                 stack.insert(0,U256::from(1));
             }
@@ -367,20 +381,20 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         else if opcode==0x12{
             let mut v0=stack.remove(0);
             let mut v1=stack.remove(0);
-            let v0_is_negative=is_negative(v0);
-            let v1_is_negative=is_negative(v1);
+            let v0_is_negative=helpers::is_negative(v0);
+            let v1_is_negative=helpers::is_negative(v1);
 
-            if is_negative(v0){
-                v0=convert_twos_compliment(v0);
+            if helpers::is_negative(v0){
+                v0=helpers::convert_twos_compliment(v0);
             }
-            if is_negative(v1){
-                v1=convert_twos_compliment(v1);
+            if helpers::is_negative(v1){
+                v1=helpers::convert_twos_compliment(v1);
             }
             if v0==v1{
                 stack.insert(0, U256::from(0));
                 break;
             }
-            let lt=less_than(v0,v1);
+            let lt=helpers::less_than(v0,v1);
             if v0_is_negative!=v1_is_negative{
                 if v0_is_negative==true{
                     stack.insert(0, U256::from(1));
@@ -415,20 +429,20 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         else if opcode==0x13{
             let mut v0=stack.remove(0);
             let mut v1=stack.remove(0);
-            let v0_is_negative=is_negative(v0);
-            let v1_is_negative=is_negative(v1);
+            let v0_is_negative=helpers::is_negative(v0);
+            let v1_is_negative=helpers::is_negative(v1);
 
-            if is_negative(v0){
-                v0=convert_twos_compliment(v0);
+            if helpers::is_negative(v0){
+                v0=helpers::convert_twos_compliment(v0);
             }
-            if is_negative(v1){
-                v1=convert_twos_compliment(v1);
+            if helpers::is_negative(v1){
+                v1=helpers::convert_twos_compliment(v1);
             }
             if v0==v1{
                 stack.insert(0, U256::from(0));
                 break;
             }
-            let gt=greater_than(v0,v1);
+            let gt=helpers::greater_than(v0,v1);
             if v0_is_negative!=v1_is_negative{
                 if v0_is_negative==true{
                     stack.insert(0, U256::from(0));
@@ -462,7 +476,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
         }
         else if opcode==0x14{
             let (mut v0,mut v1)=helpers::remove_two(&mut stack);
-            let eq=equalto(v0, v1);
+            let eq=helpers::equalto(v0, v1);
             if eq{
                 stack.insert(0,U256::from(1));
             }
@@ -472,7 +486,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
 
         }
         else if opcode==0x15{
-            let mut v0=remove_one(&mut stack);
+            let mut v0=helpers::remove_one(&mut stack);
             if v0==U256::from(0){
                 stack.insert(0,U256::from(1));
             }
@@ -481,7 +495,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             }}
 
         else if opcode==0x19{
-            let mut v0=remove_one(&mut stack);
+            let mut v0=helpers::remove_one(&mut stack);
             stack.insert(0, !v0);
             println!("{}",v0);
             println!("{}",!v0);
@@ -513,7 +527,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
 
         else if opcode==0x1c{
             let (mut shift, mut num) =helpers::remove_two(&mut stack);
-            num=shr(shift,num);
+            num=helpers::shr(shift,num);
             helpers::push(&mut stack, num);
         }
         else if opcode==0x1d{
@@ -668,22 +682,120 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
             }
             
         }
-        
-
-       
-
+        //MSTORE
+        else if opcode ==0x52{
+            let (offset, value) = helpers::remove_two(&mut stack);
     
+            // Convert offset to usize
+            let offset: usize = offset.as_usize();
+            
+            // Convert value to a 32-byte array
+            let mut value_bytes: [u8; 32] = [0u8; 32];
+            value.to_big_endian(&mut value_bytes);
 
+            if offset + 32 > memory.len() {
+                memory.resize(offset + 32, 0);
+            }
+            for i in 0..32{
+                memory[i+offset]=value_bytes[i];
+                println!("{}",memory[i+offset]);
+            }
+            println!("Length : {}",memory.len());
 
-       
             
 
-        
+           
 
+           // memory.insert(offset, value_bytes[0]);
+            
+            // Debugging output
+
+        }
+        //MLOAD
+        else if opcode == 0x51{
+            /* 
+            let offset = stack.remove(0);
+            let offset: usize = offset.as_usize();
+            let res_word = U256::from_big_endian(&memory[offset..32]);
+            helpers::push(&mut stack,res_word.into());
+            memory.clear();
+            */
+            let offset = stack.remove(0);
+            let offset: usize = offset.as_usize();
+            
+            
+            if memory.len()==32 {
+                if offset + 32 > memory.len() {
+                    memory.resize(offset + 32, 0);
+                }
+                let mut value_bytes = [0u8; 32];
+                let end = (offset + 32).min(memory.len());
+                value_bytes[..end - offset].copy_from_slice(&memory[offset..end]);
+            
+            // Convert to U256
+                let res_word = U256::from_big_endian(&value_bytes);
+            
+            // Push the result onto the stack
+                helpers::push(&mut stack, res_word.into());
+            }
+            else if memory.len()==1{
+                if offset + 32 > memory.len() {
+                    memory.resize(offset + 32, 0);
+                }
+                helpers::push(&mut stack, U256::from(memory[0]));
+            }
+
+            /* 
+            
+            // Read 32 bytes from memory starting at the offset
+            */
+        }
+        //Mstore8
+        else if opcode == 0x53{
+            let (offset, value) = helpers::remove_two(&mut stack);
+    
+            // Convert offset to usize
+            let offset: usize = offset.as_usize();
+            
+            // Convert value to a 32-byte array
+            let mut value_bytes: [u8; 32] = [0u8; 32];
+            value.to_big_endian(&mut value_bytes);
+
+
+            memory.insert(0, value_bytes[offset]);
+            println!("Length: {}",memory.len());
+                
+            
+            
+        }
+        else if opcode==0x59{
+            println!("Length: {}",memory.len());
+            helpers::push(&mut stack, U256::from(memory.len()));
+        }
+        else if opcode == 0x20{
+            let (offset, length) = helpers::remove_two(&mut stack);
+            let offset: usize = offset.as_usize();
+            let length: usize = length.as_usize();
+            let mut hasher=Keccak256::new();
+            hasher.update(&memory[offset..offset+length]);
+            let result=hasher.finalize();
+            let mut result_bytes=[0u8;32];
+            result_bytes.copy_from_slice(&result);
+            helpers::push(&mut stack, U256::from(result_bytes));
+        }
+        else if opcode==0x30{
+            match _tx.unwrap().to{
+                Some(ref to)=>{
+                    helpers::push(&mut stack, U256::from_str_radix(&to, 16).unwrap());
+                }
+                None=>{
+                    helpers::push(&mut stack, U256::from(0));
+                }
+            }
+        }
 
 
 }  
-    // TODO: Implement me
 
     return EvmResult {
         stack: stack,
@@ -691,61 +803,7 @@ pub fn evm(_code: impl AsRef<[u8]>) -> EvmResult {
     };
 }
 
-fn shr(mut shift: U256, mut num: U256) -> U256 {
 
-    let shift_amount: usize = shift.low_u64() as usize;
-    num = num >> shift_amount;
-    num
-
-
-}
-fn remove_one(stack: &mut Vec<U256>) -> U256 {
-    stack.remove(0)
-}
-
-fn equalto(x: U256, y: U256) -> bool {
-    x == y
-}
-fn greater_than(x: U256, y: U256) -> bool {
-    x > y
-}
-fn less_than(x: U256, y: U256) -> bool {
-    x < y
-}
-fn convert_twos_compliment(x: U256) -> U256 {
-    // Note, normally the twos compliment of 0 is 0
-    // However according to the EVM spec it seems to want this behaviour
-    // I am uncertain if this is a misunderstanding by me/edge case for the SAR opcode
-    // TODO: research this behaviour
-    if x == U256::zero() {
-        return !x;
-    }
-    // We do this by first doing a bitwise negation then adding one
-    !x + U256::one()
-}
-
-fn is_negative(x:U256)->bool{
-    x.bit(255)
-}
-
-fn sign(x:U256,k:U256)->bool{
-    let mut value_bytes = [0u8; 32];
-    let mut bytes_pos = k.low_u32() as usize;
-    x.to_big_endian(&mut value_bytes);
-    let sign_byte = value_bytes[31-bytes_pos];
-    let sign_bit = sign_byte & 0x80;
-    if sign_bit!=0{
-        return true;//positive
-    }
-    else {
-        return false;
-    }
-}
-fn extend(x:U256,bytes_pos:usize)->U256{
-    let bits_to_extend: usize = (bytes_pos + 1) * 8;
-    let mask = U256::MAX << bits_to_extend;
-    x | mask
-}
 
 
 

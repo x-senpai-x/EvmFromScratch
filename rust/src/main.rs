@@ -1,6 +1,9 @@
-use std::option;
+use std::ops::Add;
 
+//use std::option;
+//Option enum (some or none )
 use evm::evm;//crate used to provide evm implementation
+//to be added as dependency in Cargo.toml
 use primitive_types::U256;//allows to use U256 type
 use serde::Deserialize;
 
@@ -15,7 +18,10 @@ struct Evmtest {
     hint: String,
     code: Code,
     expect: Expect,
+    tx: Option<Tx>,
+    state: Option<String>,
 }
+
 
 //The Code struct has two fields, asm and bin, which are strings.
 
@@ -40,6 +46,16 @@ struct Expect {
     // #[serde(rename = "return")]
     // ret: Option<String>,
 }
+#[derive(Debug, Deserialize)]
+pub struct Tx{
+    value : Option<String>,
+    data: Option<String>,
+    from : Option<String>,
+    to : Option<String>,
+    gas: Option<String>,
+    origin: Option<String>,
+    gasprice: Option<String>,
+}
 
 fn main() {
     let text = std::fs::read_to_string("../evm.json").unwrap();
@@ -63,17 +79,18 @@ fn main() {
 
         let code: Vec<u8> = hex::decode(&test.code.bin).unwrap();
         //decodes the hex string (&str) into bytes and stores in code variable
-        //code is a vector of u8
-
-        let result = evm(&code);//defined in lib.rs
+        //code is a vector where each element is of type u8 (each opcode is a byte = 8 bits)
+        let tx=&test.tx;
+        let result = evm(&code, tx);
+        //evm function declared as public in lib.rs file is called with code as argument
+        //The evm function takes the bytecode (the reference to the code vector) and executes it in the EVM.
         //&code is the bytecode
-        //evm function executes the bytecode
-
+      
         let mut expected_stack: Vec<U256> = Vec::new();
        //stack holds U256 values
     
 
-        //the below line checks if test.expect.stack holds a value or not
+        //the below line checks if expect.stack holds a value or not
 
         //if it does it is assigned to staacks then it pushes the value into expected_stack
         // If test.expect.stack is None, the code inside the block will be skipped.

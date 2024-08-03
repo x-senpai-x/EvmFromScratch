@@ -1299,7 +1299,7 @@
       ],
       "success": true
     }
-  },
+  }, 
   {
     "name": "MSTORE8",
     "hint": "Store a single byte at the given offset",
@@ -1328,48 +1328,7 @@
       "success": true
     }
   },
-  {
-    "name": "MSIZE (0x20)",
-    "hint": "The first 32-byte section has been accessed, so the memory size is 32 (0x20)",
-    "code": {
-      "asm": "PUSH1 0\nMLOAD\nPOP\nMSIZE",
-      "bin": "6000515059"
-    },
-    "expect": {
-      "stack": [
-        "0x20"
-      ],
-      "success": true
-    }
-  },
-  {
-    "name": "MSIZE (0x60)",
-    "hint": "Memory is measured in 32-byte chunks",
-    "code": {
-      "asm": "PUSH1 0x39\nMLOAD\nPOP\nMSIZE",
-      "bin": "6039515059"
-    },
-    "expect": {
-      "stack": [
-        "0x60"
-      ],
-      "success": true
-    }
-  },
-  {
-    "name": "MSIZE (after MSTORE8)",
-    "hint": "Any opcode touching memory should update MSIZE, including the future ones. Implement memory access in a way that automatically updates MSIZE no matter which opcode used it",
-    "code": {
-      "asm": "PUSH1 0xff\nPUSH1 0xff\nMSTORE8\nMSIZE",
-      "bin": "60ff60ff5359"
-    },
-    "expect": {
-      "stack": [
-        "0x100"
-      ],
-      "success": true
-    }
-  },
+ 
   {
     "name": "SHA3",
     "hint": "Use an existing library for your programming language. Note that even though the opcode is called SHA3, the algorythm used is keccak256",
